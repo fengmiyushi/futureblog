@@ -1,0 +1,433 @@
+<template>
+  <el-header :style="'margin-bottom:'+ headerBottom +'px'">
+    <h2 class="logo"><svg-icon icon-class="EarOfWheat" />  Blog</h2>
+    <div class="bg-purple-light">
+      <el-menu :default-active="activeIndex" router class="el-menu-demo" mode="horizontal" style="border: none;"
+               background-color="rgba(0,0,0,0)" text-color="#fff" active-text-color="#ffd04b">
+        <el-menu-item index="/cms/main/cmsIndex"><i class="el-icon-s-home" style="color: rgba(255, 255, 255);"></i>Home
+        </el-menu-item>
+        <el-menu-item :index="item.path" v-for="item in menulist" :key="item.id">
+          <!-- 图标 -->
+          <i :class="item.icon" style="color: rgba(255, 255, 255);"></i>
+          <!-- 文本 -->
+          {{item.authName}}
+        </el-menu-item>
+      </el-menu>
+    </div>
+    <div class="bg-purple-light el-menu-hidden" v-if="menuHiddenVisiable">
+      <el-menu :default-active="activeIndex" router background-color="rgba(84,92,100,0.5)" text-color="#fff"
+               active-text-color="#ffd04b">
+        <el-menu-item index="/cms/main/cmsIndex" @click="menuAway"><i class="el-icon-s-home"
+                                                                      style="color: rgba(255, 255, 255);"></i>Home</el-menu-item>
+        <el-menu-item :index="item.path" v-for="item in menulist" :key="item.id" @click="menuAway">
+          <!-- 图标 -->
+          <i :class="item.icon" style="color: rgba(255, 255, 255);"></i>
+          <!-- 文本 -->
+          {{item.authName}}
+        </el-menu-item>
+      </el-menu>
+    </div>
+
+    <div class="menu-expend" @click="menuExpend">
+      <i class="el-icon-menu" style="color: rgba(255, 255, 255);"></i>
+    </div>
+
+    <div v-if="searchInput" class="search_input">
+      <el-input @focus="checkInput" @blur="notSearching()" class="search" placeholder="Search blogs"
+                prefix-icon="el-icon-search" v-model="queryInfo.query" size="mini">
+      </el-input>
+      <ul v-if="searching">
+        <li class="animate__animated animate__fadeInDown search-blog" v-for="blog in searchList" :key="blog.id"
+            @click="getBlogInfo(blog.id)">
+          <a><span v-html="blog.title"></span></a>
+        </li>
+      </ul>
+    </div>
+
+    <div v-if="islogin" class="bg-purple">
+      <el-dropdown class="avatar-container right-menu-item hover-effect" trigger="click">
+        <div class="avatar-wrapper">
+          <el-avatar class="user-avatar" :src="avatar" @error="errorHandler">
+            <i class="el-icon-s-custom" />
+          </el-avatar>
+          <p class="avatar-Name">{{name}}</p>
+        </div>
+        <el-dropdown-menu slot="dropdown">
+          <router-link target="_blank" to="/index">
+            <el-dropdown-item>Manage Blogs</el-dropdown-item>
+          </router-link>
+          <el-dropdown-item divided @click.native="logout">
+            <span>Logout</span>
+          </el-dropdown-item>
+        </el-dropdown-menu>
+      </el-dropdown>
+    </div>
+    <div v-else class="bg-purple">
+      <div class="avatar-wrapper">
+        <p class="avatar-Name" @click="tologin">Login | Register</p>
+      </div>
+    </div>
+  </el-header>
+</template>
+
+<script>
+import {
+  mapGetters
+} from 'vuex'
+import {
+  getToken
+} from '@/utils/auth'
+import 'element-ui/lib/theme-chalk/display.css'
+import {
+  cmsListBlog,
+} from "@/api/cms/blog";
+export default {
+  name: 'cmsNavBar',
+  data() {
+    return {
+      activeIndex: 'this.$router.path',
+      islogin: false,
+      searchInput: true,
+      menuHiddenVisiable: false,
+      headerBottom: 0,
+      queryInfo: {
+        query: '',
+        timer: null
+      },
+      searchList: [],
+      searching: false,
+      menulist: [{
+        id: 1,
+        authName: 'Essays',
+        path: '/cms/main/essay',
+        icon: 'el-icon-edit',
+      },
+        {
+          id: 2,
+          authName: 'Messages',
+          path: '/cms/main/message',
+          icon: 'el-icon-chat-dot-round',
+        },
+        // {
+        //   id: 3,
+        //   authName: 'Documents',
+        //   path: '/cms/doucument',
+        //   icon: 'el-icon-document',
+        // },
+        {
+          id: 4,
+          authName: 'DeepSeek',
+          path: '/cms/deepseek',
+          icon: 'el-icon-chat-dot-round',
+        },
+      ],
+      // Query parameters
+      queryParams: {
+        pageNum: 1,
+        pageSize: 10,
+        title: null,
+        type: 1,
+        content: null,
+        top: null,
+        views: null,
+        status: null,
+      },
+    };
+  },
+  computed: {
+    ...mapGetters([
+      'avatar',
+      'name'
+    ]),
+  },
+  watch: {
+    'queryInfo.query': {
+      handler(value) {
+        if (this.timer) {
+          clearTimeout(this.timer)
+        }
+        this.timer = setTimeout(() => {
+          this.searchBlog()
+        }, 300)
+      }
+    }
+  },
+  created() {
+    this.checkLoginStatus();
+  },
+  methods: {
+    menulistAdd() {
+      this.menulist.unshift({
+        id: "",
+        authName: ""
+      })
+    },
+    // Responsive layout
+    ResponsiveLayout() {
+      // Browser window inner width
+      var w = window.innerWidth ||
+        document.body.clientWidth;
+      // Browser window inner height
+      var h = window.innerHeight ||
+        document.body.clientHeight;
+      console.log(w, h);
+    },
+    // Expand menu bar
+    menuExpend() {
+      this.menuHiddenVisiable = !this.menuHiddenVisiable
+      if (this.menuHiddenVisiable === true) {
+        this.headerBottom = (this.menulist.length + 1) * 56
+      } else {
+        this.headerBottom = 0
+      }
+    },
+    // Collapse menu
+    menuAway() {
+      this.menuHiddenVisiable = false;
+      this.headerBottom = 0;
+    },
+    notSearching() {
+      setTimeout(() => {
+        this.searching = false
+      }, 100)
+    },
+    checkInput() {
+      this.searching = this.queryInfo.query !== '';
+    },
+    tologin() {
+      this.$router.push({
+        path: "/cmsLogin"
+      });
+    },
+    checkLoginStatus() {
+      let token = getToken();
+      if (token == null || token == '') {
+        this.islogin = false;
+      } else {
+        this.islogin = true;
+      }
+    },
+    errorHandler() {
+      return true
+    },
+    async searchBlog() {
+      if (this.queryInfo.query === '') {
+        this.searching = false
+        return
+      }
+      this.queryParams.title = this.queryInfo.query;
+      cmsListBlog(this.queryParams).then(response => {
+        let listSize = response.rows.length;
+        if (listSize > 0) {
+          for (let i = 0; i < listSize; i++) {
+            let highlightedTitle = this.highlightKeyword(response.rows[i].title, this.queryInfo.query);
+            response.rows[i].title = highlightedTitle;
+          }
+        }
+        ;
+        this.searchList = response.rows;
+        if (this.searchList.length !== 0) {
+          this.searching = true
+        }
+      });
+    },
+    // Highlight search keywords
+    highlightKeyword(val, keyword) {
+      const Reg = new RegExp(keyword, 'i');
+      let res = '';
+      if (val) {
+        res = val.replace(Reg, `<span style="color: red;">${keyword}</span>`);
+        return res;
+      }
+    },
+    // Jump to blog detail page
+    getBlogInfo(blogId) {
+      let routeUrl = this.$router.resolve({
+        path: '/cms/main/blog',
+        query: {
+          id: blogId
+        }
+      });
+      window.open(routeUrl.href, '_blank');
+    },
+    async logout() {
+      this.$confirm('Are you sure you want to log out?', 'Confirmation', {
+        confirmButtonText: 'Confirm',
+        cancelButtonText: 'Cancel',
+        type: 'warning'
+      }).then(() => {
+        this.$store.dispatch('LogOut').then(() => {
+          location.href = '/cms/main/cmsIndex';
+        })
+      }).catch(() => {
+      });
+    }
+  }
+}
+</script>
+
+<style scoped>
+.el-header {
+  display: flex;
+  justify-content: space-between;
+  background-color: rgba(0, 0, 0, 0.2);
+  align-items: center;
+  transition: .2s;
+}
+
+.el-header:hover {
+  opacity: 1 !important;
+}
+
+.el-menu {
+  flex-shrink: 0;
+  background-color: rgba(0, 0, 0, 0) !important;
+}
+
+.el-menu /deep/ .el-menu-item {
+  background-color: rgba(0, 0, 0, 0) !important;
+}
+
+
+.el-menu /deep/ .el-menu-item i {
+  color: rgba(255, 255, 255);
+}
+
+.el-menu /deep/ .el-menu-item:hover i {
+  color: white;
+}
+
+.el-menu /deep/ .el-menu-item:hover {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+.search_input {
+  position: relative;
+  box-sizing: border-box;
+}
+
+
+.search_input ul {
+  position: absolute;
+  top: 30px;
+  width: 100%;
+  border: 1px solid #e5e9ef;
+  margin-top: 1px;
+  background: #fff;
+  z-index: 10000;
+  border-radius: 2px;
+  box-shadow: 0 2px 4px rgba(58, 118, 142, 0.16);
+  padding: 10px 0;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.search_input ul li {
+  padding: 0 16px;
+  height: 32px;
+  line-height: 32px;
+  cursor: pointer;
+  word-wrap: break-word;
+  word-break: break-all;
+  display: block;
+  color: #222;
+  position: relative;
+}
+
+.search_input ul li:hover {
+  background-color: #e8f3ff;
+}
+
+
+.search-blog {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.bg-purple-light {
+  float: right;
+}
+
+.bg-purple {
+  float: right;
+}
+
+.user-avatar {
+  float: left;
+  cursor: pointer;
+  border: dashed rgba($color:#ffff7f, $alpha: 0.5);
+}
+
+.avatar-container {
+  margin-right: 30px;
+}
+
+.avatar-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.avatar-Name {
+  margin-left: 10px;
+  cursor: pointer;
+  float: right;
+  font-size: 16px;
+  color: #ffffff;
+}
+
+.logo {
+  float: left;
+  color: #ffd04b;
+  font-weight: bold;
+}
+
+.logo:hover {
+  cursor: pointer;
+}
+
+.el-menu-hidden {
+  position: absolute;
+  top: 60px;
+  left: 0;
+  border-top: 1px solid #ccc;
+  border-right: none;
+  width: 100%;
+}
+
+.menu-expend {
+  display: none !important;
+}
+
+/* Hide search box when viewport is less than 1000px */
+@media screen and (max-width: 1000px) {
+  .search_input {
+    display: none;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .el-menu /deep/ .el-menu-item {
+    background-color: rgba(0, 0, 0, 0.3) !important;
+  }
+
+  .el-menu-demo {
+    display: none;
+  }
+
+  .menu-expend {
+    display: block !important;
+    float: right;
+  }
+
+  .menu-expend:hover {
+    color: #ffd04b;
+    cursor: pointer;
+  }
+}
+</style>

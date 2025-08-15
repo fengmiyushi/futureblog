@@ -1,0 +1,364 @@
+<!-- Comment Module -->
+<template>
+  <div class="container">
+    <div class="comment" v-for="item in comments" :key="item.id">
+      <div class="info" :id="item.id">
+        <el-avatar v-if="item.avatar!==''&&item.avatar!=null" :src="item.avatar"></el-avatar>
+        <el-avatar v-else icon="el-icon-user-solid"></el-avatar>
+        <div class="right">
+          <div class="name">{{item.createBy}}</div>
+          <div class="date">{{item.createTime}}</div>
+        </div>
+      </div>
+      <div class="content">{{item.content}}</div>
+      <div class="control">
+        <span class="like" :class="{active: item.isLike}" @click="likeClick(item)">
+          <svg-icon icon-class="like" />
+          <span class="like-num" style="margin-left: 5px;">{{item.likeNum > 0 ? item.likeNum + ' likes' : 'Like'}}</span>
+        </span>
+        <span class="comment-reply" @click="showCommentInput(item)">
+          <svg-icon icon-class="comment" />
+          <span style="margin-left: 5px;">Reply</span>
+        </span>
+      </div>
+      <div class="reply">
+        <div class="item" v-for="reply in item.children" :key="reply.id" :id="reply.id">
+          <div class="reply-content">
+            <span class="from-name">{{reply.createBy}}</span><span>: </span>
+            <span class="to-name" v-show="reply.parentId!=reply.mainId">@{{reply.pcreateBy}}</span>
+            <span v-show="reply.delFlag=='0'">{{reply.content}}</span>
+            <span v-show="reply.delFlag=='1'" style="color: #909399;">This comment has been deleted!</span>
+          </div>
+          <div class="reply-bottom">
+            <span>{{reply.createTime}}</span>
+            <span class="reply-text" @click="showCommentInput(item, reply)">
+              <svg-icon icon-class="comment" />
+              <span style="margin-left: 5px;">Reply</span>
+            </span>
+          </div>
+        </div>
+        <div class="write-reply" v-if="item.children!=null" @click="showCommentInput(item)">
+          <i class="el-icon-edit"></i>
+          <span class="add-comment">Add new comment</span>
+        </div>
+        <input-component :show="showItemId === item.id"
+                         :value="inputComment"
+                         :toComment="name"
+                         :toId="id"
+                         @cancel="cancelInput"
+                         @confirm="commitComment">
+        </input-component>
+        <!--<transition name="fade">-->
+        <!--<div class="input-wrapper" v-if="showItemId === item.id">-->
+        <!--<el-input class="gray-bg-input"-->
+        <!--v-model="inputComment"-->
+        <!--type="textarea"-->
+        <!--:rows="3"-->
+        <!--autofocus-->
+        <!--placeholder="Write your comment">-->
+        <!--</el-input>-->
+        <!--<div class="btn-control">-->
+        <!--<span class="cancel" @click="cancel">Cancel</span>-->
+        <!--<el-button class="btn" type="success" round @click="commitComment">Confirm</el-button>-->
+        <!--</div>-->
+        <!--</div>-->
+        <!--</transition>-->
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import Vue from 'vue'
+import InputComponent from './InputComponent'
+import { getToken } from '@/utils/auth'
+import {
+  addCmsMessageLike,
+  delCmsMessageLike,
+} from "@/api/cms/message"
+
+export default {
+  props: {
+    comments: {
+      type: Array,
+      required: true
+    }
+  },
+  components: {
+    "input-component": InputComponent
+  },
+  data() {
+    return {
+      inputComment: '',
+      name: '',
+      id: null,
+      showItemId: '',
+      messageLikeForm: {},
+    }
+  },
+  computed: {},
+  methods: {
+    // Form reset
+    reset() {
+      this.messageLikeForm = {
+        messageId: null,
+        userId: null,
+        likeNum: null,
+        createBy: null,
+        createTime: null,
+        updateBy: null,
+        updateTime: null
+      };
+      this.resetForm("messageLikeForm");
+    },
+    /**
+     * Add like
+     */
+    addMessageLike(item){
+      let token = getToken();
+      this.reset();
+      if (token==null || token == '') {
+        this.messageLikeForm.createBy = "Anonymous User"
+        this.messageLikeForm.messageId = item.id
+        this.messageLikeForm.likeNum = item.likeNum
+      } else {
+        this.messageLikeForm.createBy = this.$store.getters.name
+        this.messageLikeForm.messageId = item.id
+        this.messageLikeForm.likeNum = item.likeNum
+      }
+      addCmsMessageLike(this.messageLikeForm).then(response => {
+        this.reset();
+      });
+    },
+    /**
+     * Remove like
+     */
+    delMessageLike(item){
+      let token = getToken();
+      this.reset();
+      if (token==null || token == '') {
+        this.messageLikeForm.createBy = "Anonymous User"
+        this.messageLikeForm.messageId = item.id
+        this.messageLikeForm.likeNum = item.likeNum
+      } else {
+        this.messageLikeForm.createBy = this.$store.getters.name
+        this.messageLikeForm.messageId = item.id
+        this.messageLikeForm.likeNum = item.likeNum
+      }
+      delCmsMessageLike(this.messageLikeForm).then(response => {
+        this.reset();
+      });
+    },
+    /**
+     * Like click handler
+     */
+    likeClick(item) {
+      if (item.isLike === null) {
+        Vue.$set(item, "isLike", true);
+        item.likeNum++
+        this.addMessageLike(item)
+      } else {
+        if (item.isLike) {
+          item.likeNum--
+          this.delMessageLike(item)
+        } else {
+          item.likeNum++
+          this.addMessageLike(item)
+        }
+        item.isLike = !item.isLike;
+      }
+    },
+
+    /**
+     * Cancel button click handler
+     */
+    cancelInput() {
+      this.showItemId = ''
+    },
+
+    /**
+     * Submit comment
+     */
+    commitComment(value) {
+      this.$emit("replyConfirm", value)
+      // console.log(value);
+    },
+
+    /**
+     * Show comment input when clicking reply button
+     * item: Current main comment
+     * reply: Current reply comment
+     */
+    showCommentInput(item, reply) {
+      if (reply) {
+        this.inputComment = ""
+        this.name = "Reply to @" + reply.createBy + ":"
+        this.id = reply.id
+      } else {
+        this.inputComment = ''
+        this.name = 'Write your comment'
+        this.id = item.id
+      }
+      this.showItemId = item.id
+    }
+  },
+  created() {
+    // console.log(this.comments)
+  }
+}
+</script>
+
+<style scoped rel="stylesheet/scss"  lang="scss">
+.container {
+  padding: 0 10px;
+  box-sizing: border-box;
+  .comment {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    border-bottom: 1px solid #F2F6FC;
+    .info {
+      display: flex;
+      align-items: center;
+      .right {
+        display: flex;
+        flex-direction: column;
+        margin-left: 10px;
+        .name {
+          font-size: 16px;
+          color: #303133;
+          margin-bottom: 5px;
+          font-weight: 500;
+        }
+        .date {
+          font-size: 12px;
+          color: #909399;
+        }
+      }
+    }
+    .content {
+      font-size: 16px;
+      color: #303133;
+      line-height: 20px;
+      padding: 10px 0;
+    }
+    .control {
+      display: flex;
+      align-items: center;
+      font-size: 14px;
+      color: #909399;
+      .like {
+        display: flex;
+        align-items: center;
+        margin-right: 20px;
+        cursor: pointer;
+        &.active, &:hover {
+          color: #409EFF;
+        }
+        .iconfont {
+          font-size: 14px;
+          margin-right: 5px;
+        }
+      }
+      .comment-reply {
+        display: flex;
+        align-items: center;
+        cursor: pointer;
+        &:hover {
+          color: #333;
+        }
+        .iconfont {
+          font-size: 16px;
+          margin-right: 5px;
+        }
+      }
+    }
+    .reply {
+      margin: 10px 0;
+      border-left: 2px solid #DCDFE6;
+      .item {
+        margin: 0 10px;
+        padding: 10px 0;
+        border-bottom: 1px dashed #EBEEF5;
+        .reply-content {
+          display: flex;
+          align-items: center;
+          font-size: 14px;
+          color: #303133;
+          .from-name {
+            color: #409EFF;
+          }
+          .to-name {
+            color: #409EFF;
+            margin-left: 5px;
+            margin-right: 5px;
+          }
+        }
+        .reply-bottom {
+          display: flex;
+          align-items: center;
+          margin-top: 6px;
+          font-size: 12px;
+          color: #909399;
+          .reply-text {
+            display: flex;
+            align-items: center;
+            margin-left: 10px;
+            cursor: pointer;
+            &:hover {
+              color: #333;
+            }
+            .icon-comment {
+              margin-right: 5px;
+            }
+          }
+        }
+      }
+      .write-reply {
+        display: flex;
+        align-items: center;
+        font-size: 14px;
+        color: #909399;
+        padding: 10px;
+        cursor: pointer;
+        &:hover {
+          color: #303133;
+        }
+        .el-icon-edit {
+          margin-right: 5px;
+        }
+      }
+      .fade-enter-active, fade-leave-active {
+        transition: opacity 0.5s;
+      }
+      .fade-enter, .fade-leave-to {
+        opacity: 0;
+      }
+      .input-wrapper {
+        padding: 10px;
+        .gray-bg-input, .el-input__inner {
+          /*background-color: #67C23A;*/
+        }
+        .btn-control {
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          padding-top: 10px;
+          .cancel {
+            font-size: 16px;
+            color: #606266;
+            margin-right: 20px;
+            cursor: pointer;
+            &:hover {
+              color: #333;
+            }
+          }
+          .confirm {
+            font-size: 16px;
+          }
+        }
+      }
+    }
+  }
+}
+</style>
